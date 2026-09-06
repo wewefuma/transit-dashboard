@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+gtfs.zip
+gtfs_extracted/
+.env.local
+.hermes/plans/
