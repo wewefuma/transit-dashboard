@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import StopsMap from './components/StopsMap'
 import { useGtfsStore } from './store/useGtfsStore'
@@ -20,6 +20,8 @@ const App: React.FC = () => {
   } = useGtfsStore()
 
   const [gtfsData, setGtfsData] = useState<any>(null)
+  const [appError, setAppError] = useState<string | null>(null)
+  const [appLoading, setAppLoading] = useState(true)
 
   useEffect(() => {
     fetch('/data/gtfs.json')
@@ -28,8 +30,12 @@ const App: React.FC = () => {
         setGtfsData(data)
         useGtfsStore.getState().setStops(data?.stops || [])
         useGtfsStore.getState().setRoutes(data?.routes || [])
+        setAppLoading(false)
       })
-      .catch(err => console.error('Failed to load GTFS data:', err))
+      .catch(err => {
+        setAppError(err.message)
+        setAppLoading(false)
+      })
   }, [])
 
   const filteredStops = useMemo(() => {
@@ -69,9 +75,9 @@ const App: React.FC = () => {
       : 0
     return [
       `Busiest stop: ${busiestStop?.name || 'N/A'} (${busiestStop?.dailyTripCount || 0} trips/day)`,
-      `Average rail headway: ${avgRail.toFixed(1)} min`,
-      `Average bus headway: ${avgBus.toFixed(1)} min`,
-      `${routes?.length || 0} routes total`,
+      `Rail avg headway: ${avgRail.toFixed(1)} min`,
+      `Bus avg headway: ${avgBus.toFixed(1)} min`,
+      `${routes?.length || 0} routes`,
       `Peak hours: 7-9 AM, 5-8 PM`
     ]
   }, [stops, routes])
@@ -80,13 +86,41 @@ const App: React.FC = () => {
     setSelectedStop(stop)
   }
 
+  // Debug overlay
+  const showDebug = true
+
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
+      {showDebug && (
+        <div style={{
+          position: 'fixed',
+          top: 10,
+          left: 10,
+          zIndex: 9999,
+          background: 'rgba(0,0,0,0.9)',
+          color: '#0f0',
+          padding: '1rem',
+          borderRadius: '8px',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          maxWidth: '400px',
+          border: '2px solid #0f0'
+        }}>
+          <h4 style={{ margin: '0 0 0.5rem 0' }}>🐞 DEBUG</h4>
+          <div>Stops: {stops?.length || 0}</div>
+          <div>Routes: {routes?.length || 0}</div>
+          <div>Loading: {appLoading ? 'YES' : 'NO'}</div>
+          <div>Error: {appError || 'none'}</div>
+        </div>
+      )}
+
+      {/* Header */}
       <header className="bg-gray-800 p-4 shadow-lg border-b border-gray-700">
         <h1 className="text-2xl font-bold">Transit Dashboard</h1>
-        <p className="text-sm text-gray-400">Sakay.ph GTFS Analytics · MapLibre (free, open-source)</p>
+        <p className="text-sm text-gray-400">MapLibre (free, no token)</p>
       </header>
 
+      {/* Filter Bar */}
       <div className="filter-bar flex flex-wrap gap-4 px-4 py-2 bg-gray-800/50">
         <select
           value={filterState.dayType}
@@ -106,39 +140,29 @@ const App: React.FC = () => {
             <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
           ))}
         </select>
-        <select
-          multiple
-          value={filterState.modes}
-          onChange={(e) => setFilterState({ ...filterState, modes: Array.from(e.target.selectedOptions, o => o.value as any) })}
-          className="bg-gray-800 border-gray-600 text-white rounded px-3 py-2"
-        >
-          <option value="rail">Rail</option>
-          <option value="bus">Bus</option>
-          <option value="jeepney">Jeepney</option>
-        </select>
       </div>
 
+      {/* Main content with Map and Analytics */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 min-w-0 relative bg-gray-900">
-          <div className="h-[60vh] w-full relative">
-            {stops && stops.length > 0 ? (
+        {/* Map */}
+        <div className="flex-1 min-w-0">
+          <div className="h-[60vh] w-full bg-gray-800 relative">
+            {appLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                <p>Loading GTFS data...</p>
+              </div>
+            ) : (
               <StopsMap
                 stops={filteredStops}
                 routes={routes || []}
                 onStopClick={handleStopClick}
                 selectedStopId={selectedStop?.id || null}
               />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-900">
-                <div className="text-center">
-                  <p>Loading GTFS data...</p>
-                  <p className="text-sm mt-1">{gtfsData ? `Loaded ${gtfsData.stops?.length || 0} stops` : 'Fetching from /data/gtfs.json'}</p>
-                </div>
-              </div>
             )}
           </div>
         </div>
 
+        {/* Analytics Panel */}
         <div className="w-96 bg-gray-800 p-4 overflow-y-auto border-l border-gray-700">
           <div className="card mb-4 bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-semibold mb-3">🚦 Insights</h3>
@@ -150,34 +174,26 @@ const App: React.FC = () => {
           </div>
 
           <div className="card bg-gray-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-3">📊 Route Rankings</h3>
-            {routeRankings.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={routeRankings} layout="vertical">
-                  <YAxis dataKey="route" type="category" tick={{ fill: '#9ca3af', fontSize: 11 }} width={100} />
-                  <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }} />
-                  <Bar dataKey="trips">
-                    {routeRankings.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={typeColors[entry.type] || '#6b7280'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-400 text-center py-8">No route data available</p>
-            )}
+            <h3 className="text-lg font-semibold mb-3">📊 Routes</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={routeRankings} layout="vertical">
+                <YAxis dataKey="route" type="category" tick={{ fill: '#9ca3af', fontSize: 11 }} width={100} />
+                <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="trips">
+                  {routeRankings.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={typeColors[entry.type] || '#6b7280'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
 
           {selectedStop && (
             <div className="card mt-4 bg-gray-800 rounded-lg p-4">
-              <h3 className="text-lg font-semibold mb-3">📍 Selected Stop</h3>
-              <div className="space-y-2">
-                <p><strong>{selectedStop?.name || 'Unknown'}</strong></p>
-                <p className="text-sm text-gray-400">{selectedStop?.dailyTripCount || 0} trips/day</p>
-                <p className="text-sm text-gray-400">{selectedStop?.routeIds?.length || 0} routes</p>
-                <p className="text-sm text-gray-400">Type: {selectedStop?.type || 'unknown'}</p>
-              </div>
+              <h3 className="text-lg font-semibold mb-3">📍 Stop</h3>
+              <p><strong>{selectedStop?.name || 'Unknown'}</strong></p>
+              <p className="text-sm text-gray-400">{selectedStop?.dailyTripCount || 0} trips/day</p>
             </div>
           )}
         </div>
