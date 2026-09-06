@@ -21,54 +21,57 @@ const App: React.FC = () => {
 
   const [gtfsData, setGtfsData] = useState<any>(null)
 
-  // Load GTFS data on mount
   useEffect(() => {
     fetch('/data/gtfs.json')
       .then(res => res.json())
       .then(data => {
         setGtfsData(data)
-        useGtfsStore.getState().setStops(data.stops)
-        useGtfsStore.getState().setRoutes(data.routes)
+        useGtfsStore.getState().setStops(data?.stops || [])
+        useGtfsStore.getState().setRoutes(data?.routes || [])
       })
       .catch(err => console.error('Failed to load GTFS data:', err))
   }, [])
 
   const filteredStops = useMemo(() => {
-    if (!stops || !routes) return []
+    if (!stops || stops.length === 0 || !routes || routes.length === 0) return []
+    const hour = new Date().getHours()
     return stops.filter(s => {
-      const hour = new Date().getHours()
       return hour >= filterState.timeRange[0] && hour <= filterState.timeRange[1]
     })
-  }, [stops, filterState])
+  }, [stops, routes, filterState])
 
   const routeRankings = useMemo(() => {
-    if (!stops || !routes) return []
+    if (!stops || stops.length === 0 || !routes || routes.length === 0) return []
     return routes
       .map(route => ({
-        route: route.name,
-        trips: stops.filter(s => s.routeIds.includes(route.id)).length,
-        type: route.type
+        route: route?.name || 'Unknown',
+        trips: stops.filter(s => s?.routeIds?.includes(route?.id)).length,
+        type: route?.type || 'bus'
       }))
       .sort((a, b) => b.trips - a.trips)
       .slice(0, 15)
   }, [stops, routes])
 
   const insights = useMemo(() => {
-    if (!stops || !routes) return []
-    const busiestStop = stops.reduce((max, s) => s.dailyTripCount > max.dailyTripCount ? s : max, stops[0])
-    const railRoutes = routes.filter(r => r.type === 'rail')
-    const busRoutes = routes.filter(r => r.type === 'bus')
-    const avgRail = railRoutes.length > 0 
-      ? railRoutes.reduce((sum, r) => sum + r.avgHeadwayMinutes, 0) / railRoutes.length 
+    if (!stops || stops.length === 0 || !routes || routes.length === 0) return ['Loading...']
+    const busiestStop = stops.reduce((max: any, s: any) => {
+      const maxCount = max?.dailyTripCount || 0
+      const sCount = s?.dailyTripCount || 0
+      return sCount > maxCount ? s : max
+    }, stops[0] || { name: 'N/A', dailyTripCount: 0 })
+    const railRoutes = routes.filter((r: any) => r?.type === 'rail')
+    const busRoutes = routes.filter((r: any) => r?.type === 'bus')
+    const avgRail = railRoutes.length > 0
+      ? railRoutes.reduce((sum: number, r: any) => sum + (r?.avgHeadwayMinutes || 0), 0) / railRoutes.length
       : 0
     const avgBus = busRoutes.length > 0
-      ? busRoutes.reduce((sum, r) => sum + r.avgHeadwayMinutes, 0) / busRoutes.length
+      ? busRoutes.reduce((sum: number, r: any) => sum + (r?.avgHeadwayMinutes || 0), 0) / busRoutes.length
       : 0
     return [
-      `Busiest stop: ${busiestStop.name} (${busiestStop.dailyTripCount} trips/day)`,
+      `Busiest stop: ${busiestStop?.name || 'N/A'} (${busiestStop?.dailyTripCount || 0} trips/day)`,
       `Average rail headway: ${avgRail.toFixed(1)} min`,
       `Average bus headway: ${avgBus.toFixed(1)} min`,
-      `${routes.length} routes total`,
+      `${routes?.length || 0} routes total`,
       `Peak hours: 7-9 AM, 5-8 PM`
     ]
   }, [stops, routes])
@@ -79,14 +82,12 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="bg-gray-800 p-4 shadow-lg border-b border-gray-700">
         <h1 className="text-2xl font-bold">Transit Dashboard</h1>
-        <p className="text-sm text-gray-400">Sakay.ph GTFS Analytics</p>
+        <p className="text-sm text-gray-400">Sakay.ph GTFS Analytics · MapLibre (free, open-source)</p>
       </header>
 
-      {/* Filter Bar */}
-      <div className="filter-bar flex flex-wrap gap-4 px-4 py-2">
+      <div className="filter-bar flex flex-wrap gap-4 px-4 py-2 bg-gray-800/50">
         <select
           value={filterState.dayType}
           onChange={(e) => setFilterState({ ...filterState, dayType: e.target.value as any })}
@@ -117,27 +118,33 @@ const App: React.FC = () => {
         </select>
       </div>
 
-      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Map */}
-        <div className="flex-1 min-w-0">
-          <div className="h-[60vh] w-full">
-            <StopsMap
-              stops={filteredStops}
-              routes={routes}
-              onStopClick={handleStopClick}
-              selectedStopId={selectedStop?.id || null}
-            />
+        <div className="flex-1 min-w-0 relative bg-gray-900">
+          <div className="h-[60vh] w-full relative">
+            {stops && stops.length > 0 ? (
+              <StopsMap
+                stops={filteredStops}
+                routes={routes || []}
+                onStopClick={handleStopClick}
+                selectedStopId={selectedStop?.id || null}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-900">
+                <div className="text-center">
+                  <p>Loading GTFS data...</p>
+                  <p className="text-sm mt-1">{gtfsData ? `Loaded ${gtfsData.stops?.length || 0} stops` : 'Fetching from /data/gtfs.json'}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Analytics Panel */}
         <div className="w-96 bg-gray-800 p-4 overflow-y-auto border-l border-gray-700">
           <div className="card mb-4 bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-semibold mb-3">🚦 Insights</h3>
             {insights.map((insight, i) => (
-              <div key={i} className="insight-item border-l-3 border-blue-500 bg-blue-900/20 p-3 rounded-r mb-2">
-                <p className="text-sm">{insight}</p>
+              <div key={i} className="border-l-4 border-blue-500 bg-blue-900/10 p-3 rounded-r mb-2">
+                <p className="text-sm text-gray-200">{insight}</p>
               </div>
             ))}
           </div>
@@ -145,19 +152,11 @@ const App: React.FC = () => {
           <div className="card bg-gray-800 rounded-lg p-4">
             <h3 className="text-lg font-semibold mb-3">📊 Route Rankings</h3>
             {routeRankings.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={routeRankings} layout="vertical">
-                  <YAxis 
-                    dataKey="route" 
-                    type="category" 
-                    tick={{ fill: '#9ca3af', fontSize: 11 }}
-                    width={120}
-                  />
+                  <YAxis dataKey="route" type="category" tick={{ fill: '#9ca3af', fontSize: 11 }} width={100} />
                   <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                  <Tooltip 
-                    contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                    formatter={(value: number) => [value, 'trips']}
-                  />
+                  <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }} />
                   <Bar dataKey="trips">
                     {routeRankings.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={typeColors[entry.type] || '#6b7280'} />
@@ -172,12 +171,12 @@ const App: React.FC = () => {
 
           {selectedStop && (
             <div className="card mt-4 bg-gray-800 rounded-lg p-4">
-              <h3 className="text-lg font-semibold mb-3">📍 Stop Details</h3>
+              <h3 className="text-lg font-semibold mb-3">📍 Selected Stop</h3>
               <div className="space-y-2">
-                <p><strong>{selectedStop.name}</strong></p>
-                <p className="text-sm text-gray-400">{selectedStop.dailyTripCount} trips/day</p>
-                <p className="text-sm text-gray-400">{selectedStop.routeIds.length} routes</p>
-                <p className="text-sm text-gray-400">Type: {selectedStop.type}</p>
+                <p><strong>{selectedStop?.name || 'Unknown'}</strong></p>
+                <p className="text-sm text-gray-400">{selectedStop?.dailyTripCount || 0} trips/day</p>
+                <p className="text-sm text-gray-400">{selectedStop?.routeIds?.length || 0} routes</p>
+                <p className="text-sm text-gray-400">Type: {selectedStop?.type || 'unknown'}</p>
               </div>
             </div>
           )}
