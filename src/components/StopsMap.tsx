@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-
-// maplibre-gl types
-declare const maplibregl: any
+import * as maplibregl from 'maplibre-gl'
 
 interface MaplibreMapProps {
   stops: any[]
@@ -24,10 +22,7 @@ const StopsMap: React.FC<MaplibreMapProps> = ({ stops, routes, onStopClick, sele
   useEffect(() => {
     if (!mapContainer.current || map.current) return
 
-    const initMap = async () => {
-      // Dynamically load maplibre-gl to avoid SSR issues
-      const maplibregl = (await import('maplibre-gl')).default
-
+    const initMap = () => {
       map.current = new maplibregl.Map({
         container: mapContainer.current,
         style: 'https://demotiles.maplibre.org/style.json', // free style
