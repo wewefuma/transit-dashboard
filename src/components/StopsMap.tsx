@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 
-// mapbox-gl types
-declare const mapboxgl: any
+// maplibre-gl types
+declare const maplibregl: any
 
-interface MapboxMapProps {
+interface MaplibreMapProps {
   stops: any[]
   routes: any[]
   onStopClick: (stop: any) => void
@@ -16,7 +16,7 @@ const typeColors: Record<string, string> = {
   jeepney: '#F1C40F'
 }
 
-const StopsMap: React.FC<MapboxMapProps> = ({ stops, routes, onStopClick, selectedStopId }) => {
+const StopsMap: React.FC<MaplibreMapProps> = ({ stops, routes, onStopClick, selectedStopId }) => {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
@@ -25,19 +25,17 @@ const StopsMap: React.FC<MapboxMapProps> = ({ stops, routes, onStopClick, select
     if (!mapContainer.current || map.current) return
 
     const initMap = async () => {
-      // Dynamically load mapbox-gl to avoid SSR issues
-      const mapboxgl = (await import('mapbox-gl')).default
+      // Dynamically load maplibre-gl to avoid SSR issues
+      const maplibregl = (await import('maplibre-gl')).default
 
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoiZGVtbyIsImEiOiJja3oifQ.demo'
-
-      map.current = new mapboxgl.Map({
+      map.current = new maplibregl.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'https://demotiles.maplibre.org/style.json', // free style
         center: [120.9842, 14.5995], // Manila
         zoom: 12
       })
 
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
+      map.current.addControl(new maplibregl.NavigationControl(), 'top-right')
 
       map.current.on('load', () => {
         setMapLoaded(true)
@@ -58,7 +56,7 @@ const StopsMap: React.FC<MapboxMapProps> = ({ stops, routes, onStopClick, select
   useEffect(() => {
     if (!map.current || !mapLoaded || !stops.length) return
 
-    const mapboxgl = (window as any).mapboxgl
+    const maplibregl = (window as any).maplibregl
     const mapInstance = map.current
 
     // Add source if not exists
